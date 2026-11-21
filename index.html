@@ -288,7 +288,7 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     if (url === "/api/etat") { if (!dernierEtat) throw Object.assign(new Error("en attente du PC"), { status: 0 }); return dernierEtat; }
     if (url === "/api/action") { const d = await cmd(corps.quoi, corps); return d || { ok: true }; }
     if (url.startsWith("/api/replay")) return cmd("replay", { id: new URL(url, location.href).searchParams.get("id") });
-    if (url === "/api/deconnexion") { await sb.rpc("mobile_delier").catch(() => {}); try { localStorage.removeItem("jordanProprio"); } catch (x) {} proprio = null; return { ok: true }; }
+    if (url === "/api/deconnexion") { try { const k = localStorage.getItem("jordanCle"); if (k) await sb.rpc("mobile_oublier_cle", { p_cle: k }); localStorage.removeItem("jordanCle"); } catch (x) {} history.replaceState(null, "", location.pathname); await sb.rpc("mobile_delier").catch(() => {}); try { localStorage.removeItem("jordanProprio"); } catch (x) {} proprio = null; return { ok: true }; }
     throw new Error("indisponible");
   };
   const api = CLOUD ? apiCloud : async (url, corps) => { const r = await fetch(url, corps ? { method: "POST", headers: { "Content-Type": "application/json", "X-Jordan": "1" }, body: JSON.stringify(corps), credentials: "same-origin" } : { credentials: "same-origin", cache: "no-store" });
@@ -458,10 +458,19 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     let { data } = await sb.auth.getSession();
     if (!data.session) { const r = await sb.auth.signInAnonymously(); if (r.error) return ecranLier("Connexion au serveur impossible : " + esc(r.error.message)); }
     const m = location.hash.match(/lien=([\w-]{20,64})/);
-    if (m) { history.replaceState(null, "", location.pathname); const r = await sb.rpc("mobile_lier", { p_jeton: m[1] }); if (r.error || !r.data) return ecranLier("Ce lien est expiré ou déjà utilisé. Refais-en un depuis le PC (valable 15 min, une seule fois)."); try { localStorage.setItem("jordanProprio", r.data); } catch (x) {} }
-    try { proprio = localStorage.getItem("jordanProprio"); } catch (x) {}
+    const mc = location.hash.match(/cle=([0-9a-f]{48})/), ls = (k, v) => { try { v === undefined ? 0 : v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); return localStorage.getItem(k); } catch (x) { return null; } };
+    if (m) { history.replaceState(null, "", location.pathname); const r = await sb.rpc("mobile_lier", { p_jeton: m[1] }); if (r.error || !r.data) return ecranLier("Ce lien est expiré ou déjà utilisé. Refais-en un depuis le PC (valable 15 min, une seule fois)."); ls("jordanProprio", r.data); ls("jordanCle", null); }
+    else if (mc) {   // icône de l'écran d'accueil : elle garde sa clé et se relie seule, même sans le PC
+      const r = await sb.rpc("mobile_lier_cle", { p_cle: mc[1] });
+      if (r.error || !r.data) { ls("jordanProprio", null); ls("jordanCle", null); return ecranLier("Cette icône n'est plus valable (iPhone délié depuis le PC). Refais un lien depuis le PC, puis remets l'icône sur l'écran d'accueil."); }
+      ls("jordanProprio", r.data); ls("jordanCle", mc[1]);
+    }
+    proprio = ls("jordanProprio");
     const v = await sb.rpc("mobile_vu"); if (!v.error && v.data) proprio = v.data;
     if (!proprio) return ecranLier();
+    let cle = ls("jordanCle");   // l'adresse porte la clé : « Sur l'écran d'accueil » l'emporte avec elle
+    if (!cle) { const r = await sb.rpc("mobile_creer_cle"); if (!r.error && r.data) cle = ls("jordanCle", r.data); }
+    if (cle && !mc) { history.replaceState(null, "", location.pathname + "#cle=" + cle); if (!navigator.standalone) setTimeout(() => toast("Partager → Sur l'écran d'accueil"), 1500); }
     $("connexion").classList.remove("vu");
     const jt = async () => { const { data } = await sb.auth.getSession(); return data.session && data.session.access_token; };
     await sb.realtime.setAuth(await jt());   // jeton explicite : sinon le canal privé refuse la lecture
