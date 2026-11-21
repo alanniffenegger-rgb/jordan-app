@@ -463,11 +463,12 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     const v = await sb.rpc("mobile_vu"); if (!v.error && v.data) proprio = v.data;
     if (!proprio) return ecranLier();
     $("connexion").classList.remove("vu");
-    await sb.realtime.setAuth();
+    const jt = async () => { const { data } = await sb.auth.getSession(); return data.session && data.session.access_token; };
+    await sb.realtime.setAuth(await jt());   // jeton explicite : sinon le canal privé refuse la lecture
     canal = sb.channel("jordan:" + proprio, { config: { private: true } })
       .on("broadcast", { event: "etat" }, ({ payload }) => { dernierEtat = payload; dernierOk = Date.now(); $("hors").classList.remove("vu"); if (!document.hidden) peindre(payload); })
       .on("broadcast", { event: "rep" }, ({ payload }) => { const a = attente[payload.id]; if (a) { delete attente[payload.id]; payload.ok ? a.ok(payload.data || { ok: true }) : a.ko(new Error(payload.erreur || "refusé")); } else { reponsesTot[payload.id] = payload; setTimeout(() => delete reponsesTot[payload.id], 30000); } })
-      .subscribe(st => { if (st === "SUBSCRIBED") cmd("etat").catch(() => {}); });
+      .subscribe(async st => { if (st === "SUBSCRIBED") cmd("etat").catch(() => {}); else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT") { await sb.realtime.setAuth(await jt()); setTimeout(() => canal && canal.subscribe(), 3000); } });
     setInterval(presence, 15000);
     lancer();
   }
