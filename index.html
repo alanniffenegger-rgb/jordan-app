@@ -170,7 +170,7 @@ nav .pastille.vu { display: block; }
 #replay { padding: 0; place-items: stretch; }
 #replay .boite { max-width: none; width: 100%; height: 100%; border-radius: 0; display: flex; flex-direction: column; padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 14px); }
 #replay canvas { flex: 1 1 auto; min-height: 0; width: 100%; margin: 8px 0 12px; touch-action: none; }
-#rpT { font-size: 20px; } #rpP { font-size: 14px; line-height: 1.5; }
+#confirme { z-index: 40; } #rpT { font-size: 20px; } #rpP { font-size: 14px; line-height: 1.5; }
 body.paysage header, body.paysage nav, body.paysage .vue[data-vue="scalp"] .carte:not(:first-child), body.paysage .vue[data-vue="scalp"] .mini, body.paysage .vue[data-vue="scalp"] .msg, body.paysage .vue[data-vue="scalp"] .pres { display: none; }
 body.paysage main { padding: calc(var(--haut) + 6px) calc(env(safe-area-inset-right) + 8px) 6px calc(env(safe-area-inset-left) + 8px); }
 body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; border-radius: 16px; } body.paysage #graph { height: calc(100dvh - 70px); }
@@ -495,9 +495,9 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
   /* ---------- actions ---------- */
   let aFaire = null;
   const confirmer = (titre, texte, f) => { $("cfT").textContent = titre; $("cfP").textContent = texte; aFaire = f; $("confirme").classList.add("vu"); };
-  $("cfNon").onclick = () => $("confirme").classList.remove("vu");
+  $("cfNon").onclick = () => { $("confirme").classList.remove("vu"); if (rpAnnule) { const f = rpAnnule; rpAnnule = null; f(); } };
   $("confirme").onclick = e => { if (e.target === $("confirme")) $("confirme").classList.remove("vu"); };
-  $("cfOui").onclick = async () => { $("confirme").classList.remove("vu"); if (aFaire) { try { await aFaire(); await tirer(); } catch (x) { toast(x.message); } } };
+  $("cfOui").onclick = async () => { $("confirme").classList.remove("vu"); const annule = rpAnnule; rpAnnule = null; if (aFaire) { try { await aFaire(); await tirer(); } catch (x) { toast(x.message); if (annule) annule(); } } };
   $("bPause").onclick = () => { const p = E && E.reglages && E.reglages.pause;
     confirmer(p ? "Reprendre Jordan ?" : "Mettre Jordan en pause ?", p ? "Les scans, les décisions et les ordres reprennent." : "Plus aucun nouvel ordre ne part. Les positions ouvertes gardent leur SL et leur TP.", () => api("/api/action", { quoi: "pause", valeur: !p })); };
   const CLES = { scalp: "scalpActif", crypto: "scalpCrypto", suiveur: "scalpSuiveur", cassure: "scalpCassure" };
@@ -522,7 +522,10 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     $("rpT").innerHTML = esc(x.paire) + ' <span class="tag ' + x.sens + '">' + x.sens + "</span>" + (ec ? ' <span class="tag">en cours</span>' : "");
     $("rpP").innerHTML = tr ? '<span class="' + sg(tr.r) + '">' + rr(tr.r) + " · " + usd(tr.usd) + "</span> · " + esc(tr.strat || "") + " · " + jh(tr.ts) : esc(ec.strat || ec.tf || "");
     $("replay").classList.add("vu"); const c = $("rpC"); c.style.display = "";
-    const charger = async () => { try { const R = await api("/api/replay?id=" + encodeURIComponent(id)); if (rpId !== id) return; if (!R || R.vide) { c.style.display = "none"; $("rpP").innerHTML = (ec ? "" : $("rpP").innerHTML + "<br>") + '<span class="f">' + (ec ? "Graphique pas encore disponible." : "Pas de graphique enregistré pour ce trade.") + "</span>"; return; }
+    const charger = async () => { try { const R = await api("/api/replay?id=" + encodeURIComponent(id)); if (rpId !== id) return; if (!R || R.vide) { c.style.display = "none"; if (ec && ec.tf) { if (!$("rpScan")) { $("rpP").innerHTML = esc(ec.paire) + " " + esc(ec.tf) + " n'a pas encore été lu par Jordan.<br><button class='btn or' id='rpScan' style='margin-top:12px;width:100%'>Scanner " + esc(ec.paire) + " " + esc(ec.tf) + "</button>";
+            $("rpScan").onclick = async () => { const b = $("rpScan"); b.disabled = true; b.textContent = "Lecture du graphique sur le PC…"; try { await api("/api/action", { quoi: "lire", paire: ec.paire, tf: ec.tf }); } catch (x) { toast(x.message); b.disabled = false; b.textContent = "Réessayer"; } }; } }
+          else $("rpP").innerHTML += '<br><span class="f">Pas de graphique enregistré pour ce trade.</span>'; return; }
+        c.style.display = "";
         if (R.live) $("rpP").innerHTML = esc(R.strat || "") + " · " + esc(R.tf) + " en direct<br>Prix <b>" + R.dernier + "</b>" + (R.r_latent != null ? ' · <span class="' + sg(R.r_latent) + '">' + rr(R.r_latent) + "</span>" : "") + (R.latent != null ? ' · <span class="' + sg(R.latent) + '">' + usd(R.latent) + "</span>" : "") + (R.sl_init && R.sl_init !== R.sl ? "<br>Stop suiveur à " + R.sl : "");
         rpR = R; requestAnimationFrame(peindreRp); } catch (x) { toast(x.message); } };
     await charger(); if (ec) rpMinut = setInterval(() => { if (!$("replay").classList.contains("vu") || rpId !== id) return clearInterval(rpMinut); if (!document.hidden) charger(); }, 5000);
@@ -542,6 +545,7 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     for (const v of [R.sl, R.tp, R.entree, R.sortie, R.dernier, R.sl_init, R.suiveur]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     const m = (hi - lo) * .07 || 1; lo -= m; hi += m;
     const slot = W / (n + 2), Y = v => padH + (hi - v) / (hi - lo) * H, X = i => (i + .5) * slot;
+    cv._geo = { Y, V: y => hi - (y - padH) / H * (hi - lo), W };
     // grille + axe des prix
     g.font = "500 " + fs + "px Inter, sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
     for (let k = 0; k <= 6; k++) { const v = lo + (hi - lo) * k / 6, y = Math.round(Y(v)) + .5; g.strokeStyle = CL.grille; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillStyle = CL.faint; g.fillText(fx(v), W + 8, y); }
@@ -587,8 +591,16 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
 
   let rpR = null, rpSouris = null; const peindreRp = () => rpR && grapheTrade($("rpC"), rpR, rpSouris);
   addEventListener("resize", peindreRp);
-  $("rpC").addEventListener("pointermove", e => { const r = $("rpC").getBoundingClientRect(); rpSouris = { x: e.clientX - r.left, y: e.clientY - r.top }; peindreRp(); });
-  $("rpC").addEventListener("pointerup", () => { rpSouris = null; peindreRp(); }); $("rpC").addEventListener("pointerleave", () => { rpSouris = null; peindreRp(); });
+  // le doigt sur une ligne SL ou TP (position ouverte) la fait glisser ; au lâcher, confirmation puis envoi à TradingView
+  let rpDrag = null, rpBase = null; const rpPos = e => { const r = $("rpC").getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  $("rpC").addEventListener("pointerdown", e => { const p = rpPos(e), G = $("rpC")._geo; if (!rpR || !rpR.live || !G || p.x > G.W) return; for (const k of ["sl", "tp"]) if (rpR[k] != null && Math.abs(G.Y(rpR[k]) - p.y) < 18) { rpBase = rpR; rpDrag = { k, de: rpR[k] }; $("rpC").setPointerCapture(e.pointerId); clearInterval(rpMinut); return; } });
+  $("rpC").addEventListener("pointermove", e => { const p = rpPos(e);
+    if (rpDrag) { rpDrag.v = $("rpC")._geo.V(p.y); rpR = Object.assign({}, rpBase, { [rpDrag.k]: rpDrag.v }); rpSouris = null; } else rpSouris = p; peindreRp(); });
+  $("rpC").addEventListener("pointerup", () => { if (!rpDrag) { rpSouris = null; return peindreRp(); } const d = rpDrag; rpDrag = null; if (d.v == null) { rpR = rpBase; return peindreRp(); }
+    const v = +d.v.toFixed(rpBase.decimales ?? 5), nom = d.k === "sl" ? "le SL" : "le TP", id = rpId;
+    confirmer("Déplacer " + nom + " ?", "De " + d.de + " à " + v + ". Jordan l'envoie tout de suite à TradingView.", async () => { await api("/api/action", { quoi: "niveaux", id, [d.k]: v }); toast((d.k === "sl" ? "SL" : "TP") + " déplacé à " + v); if (rpId === id) ouvrirReplay(id); });
+    rpAnnule = () => { rpR = rpBase; peindreRp(); if (rpId) ouvrirReplay(rpId); }; });
+  let rpAnnule = null; $("rpC").addEventListener("pointerleave", () => { if (!rpDrag) { rpSouris = null; peindreRp(); } });
   function dessinerReplay(cv, R) {
     const z = prep(cv); if (!z) return; const { g, w, h } = z, B = R.bars || [], n = B.length; if (n < 2) return; const d = R.decimales ?? 5;
     let lo = Infinity, hi = -Infinity; for (const b of B) { lo = Math.min(lo, b[3]); hi = Math.max(hi, b[2]); } for (const v of [R.sl, R.tp, R.entree, R.sortie, R.dernier, R.sl_init, R.suiveur]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
