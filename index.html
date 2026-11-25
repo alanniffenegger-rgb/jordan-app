@@ -546,8 +546,9 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     let lo = Infinity, hi = -Infinity; for (const b of B) { lo = Math.min(lo, b[3]); hi = Math.max(hi, b[2]); }
     for (const v of [R.sl, R.tp, R.entree, R.sortie, R.dernier, R.sl_init, R.suiveur]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     const m = (hi - lo) * .07 || 1; lo -= m; hi += m;
+    if (R._echelle) { lo = R._echelle.lo; hi = R._echelle.hi; }   // échelle figée pendant qu'on glisse une ligne (déplacement régulier)
     const slot = W / (n + 2), Y = v => padH + (hi - v) / (hi - lo) * H, X = i => (i + .5) * slot;
-    cv._geo = { Y, V: y => hi - (y - padH) / H * (hi - lo), W };
+    cv._geo = { Y, V: y => hi - (y - padH) / H * (hi - lo), W, lo, hi };
     // grille + axe des prix
     g.font = "500 " + fs + "px Inter, sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
     for (let k = 0; k <= 6; k++) { const v = lo + (hi - lo) * k / 6, y = Math.round(Y(v)) + .5; g.strokeStyle = CL.grille; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillStyle = CL.faint; g.fillText(fx(v), W + 8, y); }
@@ -595,9 +596,9 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
   addEventListener("resize", peindreRp);
   // le doigt sur une ligne SL ou TP (position ouverte) la fait glisser ; au lâcher, confirmation puis envoi à TradingView
   let rpDrag = null, rpBase = null; const rpPos = e => { const r = $("rpC").getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-  $("rpC").addEventListener("pointerdown", e => { const p = rpPos(e), G = $("rpC")._geo; if (!rpR || !rpR.live || !G || p.x > G.W) return; for (const k of ["sl", "tp"]) if (rpR[k] != null && Math.abs(G.Y(rpR[k]) - p.y) < 18) { rpBase = rpR; rpDrag = { k, de: rpR[k] }; $("rpC").setPointerCapture(e.pointerId); clearInterval(rpMinut); return; } });
+  $("rpC").addEventListener("pointerdown", e => { const p = rpPos(e), G = $("rpC")._geo; if (!rpR || !rpR.live || !G || p.x > G.W) return; for (const k of ["sl", "tp"]) if (rpR[k] != null && Math.abs(G.Y(rpR[k]) - p.y) < 18) { rpBase = rpR; rpDrag = { k, de: rpR[k], echelle: { lo: G.lo, hi: G.hi } }; $("rpC").setPointerCapture(e.pointerId); clearInterval(rpMinut); return; } });
   $("rpC").addEventListener("pointermove", e => { const p = rpPos(e);
-    if (rpDrag) { rpDrag.v = $("rpC")._geo.V(p.y); rpR = Object.assign({}, rpBase, { [rpDrag.k]: rpDrag.v }); rpSouris = null; } else rpSouris = p; peindreRp(); });
+    if (rpDrag) { rpDrag.v = $("rpC")._geo.V(p.y); rpR = Object.assign({}, rpBase, { [rpDrag.k]: rpDrag.v, _echelle: rpDrag.echelle }); rpSouris = null; } else rpSouris = p; peindreRp(); });
   $("rpC").addEventListener("pointerup", () => { if (!rpDrag) { rpSouris = null; return peindreRp(); } const d = rpDrag; rpDrag = null; if (d.v == null) { rpR = rpBase; return peindreRp(); }
     const v = +d.v.toFixed(rpBase.decimales ?? 5), nom = d.k === "sl" ? "le SL" : "le TP", id = rpId;
     confirmer("Déplacer " + nom + " ?", "De " + d.de + " à " + v + ". Jordan l'envoie tout de suite à TradingView.", async () => { await api("/api/action", { quoi: "niveaux", id, [d.k]: v }); toast((d.k === "sl" ? "SL" : "TP") + " déplacé à " + v); if (rpId === id) ouvrirReplay(id); });
