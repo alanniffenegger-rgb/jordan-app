@@ -167,7 +167,10 @@ nav .pastille.vu { display: block; }
 .liste .fermer { grid-column: 1 / -1; justify-self: end; margin-top: 6px; height: 32px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(240,86,91,.45); background: rgba(240,86,91,.1); color: #ffc9cb; font: 600 12.5px var(--font); }
 .liste > div.tap { cursor: pointer; } .liste > div.tap:active { background: rgba(255,255,255,.03); }
 .liste .rp { color: var(--or); font-size: 11px; margin-left: 4px; }
-#replay .boite { max-width: 640px; } #replay canvas { height: 240px; margin: 4px 0 12px; }
+#replay { padding: 0; place-items: stretch; }
+#replay .boite { max-width: none; width: 100%; height: 100%; border-radius: 0; display: flex; flex-direction: column; padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 14px); }
+#replay canvas { flex: 1 1 auto; min-height: 0; width: 100%; margin: 8px 0 12px; touch-action: none; }
+#rpT { font-size: 20px; } #rpP { font-size: 14px; line-height: 1.5; }
 body.paysage header, body.paysage nav, body.paysage .vue[data-vue="scalp"] .carte:not(:first-child), body.paysage .vue[data-vue="scalp"] .mini, body.paysage .vue[data-vue="scalp"] .msg, body.paysage .vue[data-vue="scalp"] .pres { display: none; }
 body.paysage main { padding: calc(var(--haut) + 6px) calc(env(safe-area-inset-right) + 8px) 6px calc(env(safe-area-inset-left) + 8px); }
 body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; border-radius: 16px; } body.paysage #graph { height: calc(100dvh - 70px); }
@@ -218,7 +221,7 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     <div class="carte regl" style="--i:1">
       <button data-r="scalp"><div><b>Scalping</b><small>M1, risque 0,25 % par scalp</small></div><span class="inter" id="rScalp"></span></button>
       <button data-r="crypto"><div><b>Crypto 24/7</b><small>Bitcoin, Ethereum, Dogecoin (essai)</small></div><span class="inter" id="rCrypto"></span></button>
-      <button data-r="suiveur"><div><b>Stop suiveur</b><small>gain protégé dès +1 R</small></div><span class="inter" id="rSuiveur"></span></button>
+      <button data-r="suiveur"><div><b>Stop suiveur</b><small>gain protégé dès +1,2 R</small></div><span class="inter" id="rSuiveur"></span></button>
       <button data-r="cassure"><div><b>Cassure de range</b><small>en plus du rebond sur l'EMA 20</small></div><span class="inter" id="rCassure"></span></button></div>
     <div class="carte" style="--i:2"><h2>Fil du scalping</h2><div class="evts" id="evts"></div></div>
   </section>
@@ -337,7 +340,7 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
   const prix = (el, v, d) => { if (v == null) { el.textContent = "—"; return; } if (el._v != null && v !== el._v) { el.classList.remove("haut", "bas"); void el.offsetWidth; el.classList.add(v > el._v ? "haut" : "bas"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("haut", "bas"), 900); } el._v = v; el.textContent = nb(v, d); };
   const sortieTag = m => { const k = String(m || ""); const [c, t] = /objectif/.test(k) ? ["ok", "TP"] : /suiveur/.test(k) ? ["sv", "Stop suiveur"] : /^stop/.test(k) ? ["ko", "SL"] : /temps/.test(k) ? ["", "Temps"] : k ? ["", "Marché"] : ["", ""]; return t ? '<span class="tag ' + c + '">' + t + "</span>" : ""; };
   const ligneTrade = t => `<div class="tap" data-replay="${esc(t.id || "")}"><span class="p">${esc(t.paire)} <span class="tag ${t.sens}">${t.sens}</span> ${sortieTag(t.motif)}${t.replay ? '<span class="rp">▶ replay</span>' : ""}</span><span class="v ${sg(t.r)}">${rr(t.r)}</span><span class="d">${esc(t.strat || "")} · ${jh(t.ts)}</span><span class="v2 ${sg(t.usd)}">${usd(t.usd)}</span></div>`;
-  const lignePos = (t, avecFermer) => `<div><span class="p">${esc(t.paire)} <span class="tag ${t.sens}">${t.sens}</span> <span class="f" style="font-size:12px">${esc(t.tf || "")}</span></span><span class="v ${sg(t.latent)}">${t.statut === "en_attente" ? '<span class="tag">en attente</span>' : usd(t.latent)}</span>
+  const lignePos = (t, avecFermer) => `<div class="tap"${t.statut === "ouvert" && t.id ? ` data-replay="${esc(t.id)}"` : ""}><span class="p">${esc(t.paire)} <span class="tag ${t.sens}">${t.sens}</span> <span class="f" style="font-size:12px">${esc(t.tf || "")}</span></span><span class="v ${sg(t.latent)}">${t.statut === "en_attente" ? '<span class="tag">en attente</span>' : usd(t.latent)}</span>
       <span class="d">${esc(t.strat || "")}</span><span class="v2 m">${nb(t.entree, dec(t.paire))} · SL ${nb(t.sl, dec(t.paire))} · TP ${nb(t.tp, dec(t.paire))}</span>${avecFermer && t.statut === "ouvert" ? `<button class="fermer" data-fermer="${esc(t.paire)}">Fermer au marché</button>` : ""}</div>`;
 
   function peindre(e) {
@@ -512,22 +515,90 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     const f = e.target.closest("[data-fermer]"); if (f) { e.stopPropagation(); const paire = f.dataset.fermer; confirmer("Fermer " + paire + " ?", "La position est clôturée tout de suite au prix du marché.", () => api("/api/action", { quoi: "fermer", paire }).then(() => toast(paire + " clôturé"))); return; }
     const t = e.target.closest("[data-replay]"); if (t && t.dataset.replay) ouvrirReplay(t.dataset.replay);
   });
+  let rpId = null, rpMinut = null;
   async function ouvrirReplay(id) {
-    const tr = (E && E.journal || []).find(x => x.id === id); if (!tr) return;
-    $("rpT").innerHTML = esc(tr.paire) + ' <span class="tag ' + tr.sens + '">' + tr.sens + "</span>"; $("rpP").innerHTML = '<span class="' + sg(tr.r) + '">' + rr(tr.r) + " · " + usd(tr.usd) + "</span> · " + esc(tr.strat || "") + " · " + jh(tr.ts);
+    const tr = (E && E.journal || []).find(x => x.id === id), ec = !tr && (E && E.en_cours || []).find(x => x.id === id); if (!tr && !ec) return;
+    const x = tr || ec; rpId = id; clearInterval(rpMinut); rpR = null; const cv0 = $("rpC"); cv0.getContext("2d").clearRect(0, 0, cv0.width, cv0.height);
+    $("rpT").innerHTML = esc(x.paire) + ' <span class="tag ' + x.sens + '">' + x.sens + "</span>" + (ec ? ' <span class="tag">en cours</span>' : "");
+    $("rpP").innerHTML = tr ? '<span class="' + sg(tr.r) + '">' + rr(tr.r) + " · " + usd(tr.usd) + "</span> · " + esc(tr.strat || "") + " · " + jh(tr.ts) : esc(ec.strat || ec.tf || "");
     $("replay").classList.add("vu"); const c = $("rpC"); c.style.display = "";
-    try { const R = await api("/api/replay?id=" + encodeURIComponent(id)); if (!R || R.vide) { c.style.display = "none"; $("rpP").innerHTML += '<br><span class="f">Pas de graphique enregistré pour ce trade.</span>'; return; } requestAnimationFrame(() => dessinerReplay(c, R)); } catch (x) { toast(x.message); }
+    const charger = async () => { try { const R = await api("/api/replay?id=" + encodeURIComponent(id)); if (rpId !== id) return; if (!R || R.vide) { c.style.display = "none"; $("rpP").innerHTML = (ec ? "" : $("rpP").innerHTML + "<br>") + '<span class="f">' + (ec ? "Graphique pas encore disponible." : "Pas de graphique enregistré pour ce trade.") + "</span>"; return; }
+        if (R.live) $("rpP").innerHTML = esc(R.strat || "") + " · " + esc(R.tf) + " en direct<br>Prix <b>" + R.dernier + "</b>" + (R.r_latent != null ? ' · <span class="' + sg(R.r_latent) + '">' + rr(R.r_latent) + "</span>" : "") + (R.latent != null ? ' · <span class="' + sg(R.latent) + '">' + usd(R.latent) + "</span>" : "") + (R.sl_init && R.sl_init !== R.sl ? "<br>Stop suiveur à " + R.sl : "");
+        rpR = R; requestAnimationFrame(peindreRp); } catch (x) { toast(x.message); } };
+    await charger(); if (ec) rpMinut = setInterval(() => { if (!$("replay").classList.contains("vu") || rpId !== id) return clearInterval(rpMinut); if (!document.hidden) charger(); }, 5000);
   }
-  $("rpX").onclick = () => $("replay").classList.remove("vu"); $("replay").onclick = e => { if (e.target === $("replay")) $("replay").classList.remove("vu"); };
+  $("rpX").onclick = () => { $("replay").classList.remove("vu"); rpId = null; clearInterval(rpMinut); }; $("replay").onclick = e => { if (e.target === $("replay")) $("replay").classList.remove("vu"); };
+  // GRAPHIQUE D'UN TRADE en grand (position ouverte en direct, ou replay d'un trade clos) : grille, axe des prix,
+  // heures, EMA 20/50, zones SL/TP depuis l'entrée, supports/résistances, étiquettes qui ne se chevauchent pas, réticule.
+  function grapheTrade(cv, R, souris) {
+    const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), w = r.width, h = r.height; if (!w || !h) return;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    const B = R.bars || [], n = B.length; if (n < 2) return; const d = R.decimales ?? 5, petit = w < 520, fs = petit ? 11 : 12.5;
+    const fx = v => v == null ? "—" : Number(v).toLocaleString("fr-CH", { minimumFractionDigits: d, maximumFractionDigits: d });
+    const CL = { vert: "#56d39b", rouge: "#f0565b", or: "#e9bd6a", ink: "#f1efe9", faint: "rgba(241,239,233,.42)", grille: "rgba(255,240,215,.06)" };
+    const padD = petit ? 96 : 134, padH = 14, padB = 26, W = w - padD, H = h - padH - padB;
+    let lo = Infinity, hi = -Infinity; for (const b of B) { lo = Math.min(lo, b[3]); hi = Math.max(hi, b[2]); }
+    for (const v of [R.sl, R.tp, R.entree, R.sortie, R.dernier, R.sl_init, R.suiveur]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const m = (hi - lo) * .07 || 1; lo -= m; hi += m;
+    const slot = W / (n + 2), Y = v => padH + (hi - v) / (hi - lo) * H, X = i => (i + .5) * slot;
+    // grille + axe des prix
+    g.font = "500 " + fs + "px Inter, sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
+    for (let k = 0; k <= 6; k++) { const v = lo + (hi - lo) * k / 6, y = Math.round(Y(v)) + .5; g.strokeStyle = CL.grille; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillStyle = CL.faint; g.fillText(fx(v), W + 8, y); }
+    // heures
+    const pas = Math.max(1, Math.round(n / (petit ? 4 : 8))), tz = { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit" };
+    g.textAlign = "center"; for (let i = 0; i < n; i += pas) { const t = new Date(B[i][0] * 1000), x = X(i); g.strokeStyle = CL.grille; g.beginPath(); g.moveTo(Math.round(x) + .5, padH); g.lineTo(Math.round(x) + .5, padH + H); g.stroke();
+      g.fillStyle = CL.faint; g.fillText((t.getDate() + "." + (t.getMonth() + 1) + " ") + t.toLocaleTimeString("fr-CH", tz), x, h - padB / 2); }
+    // supports / résistances
+    if (R.niveaux) { g.setLineDash([2, 6]); for (const [L, c] of [[R.niveaux.res || [], "rgba(240,120,124,.45)"], [R.niveaux.sup || [], "rgba(110,220,170,.45)"]]) for (const v of L) { if (v < lo || v > hi) continue; g.strokeStyle = c; g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(W, Y(v)); g.stroke(); } g.setLineDash([]); }
+    // zones depuis l'entrée
+    const ix = ts => { if (!ts) return null; const k = B.findIndex(b => b[0] >= ts / 1000 - 1); return k < 0 ? n - 1 : k; }, i0 = ix(R.ts_entree), i1 = ix(R.ts_sortie);
+    if (i0 != null && R.entree != null) { const x0 = X(i0) - slot / 2, x1 = i1 != null ? X(i1) + slot / 2 : W, ye = Y(R.entree);
+      if (R.tp) { g.fillStyle = "rgba(86,211,155,.10)"; g.fillRect(x0, Math.min(ye, Y(R.tp)), x1 - x0, Math.abs(Y(R.tp) - ye)); }
+      if (R.sl) { g.fillStyle = "rgba(240,86,91,.10)"; g.fillRect(x0, Math.min(ye, Y(R.sl)), x1 - x0, Math.abs(Y(R.sl) - ye)); } }
+    // EMA
+    const courbe = (A, c, lw) => { g.beginPath(); let ok = false; (A || []).slice(-n).forEach((v, i) => { if (v == null) return; ok ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)); ok = true; }); g.strokeStyle = c; g.lineWidth = lw; g.stroke(); };
+    courbe(R.ema50, "rgba(255,255,255,.30)", 1.3); courbe(R.ema20, CL.or, 1.8); g.lineWidth = 1;
+    // bougies
+    const bw = Math.max(2, slot * .64);
+    B.forEach((b, i) => { const c = b[4] >= b[1] ? CL.vert : CL.rouge, x = X(i); g.strokeStyle = c; g.beginPath(); g.moveTo(Math.round(x) + .5, Y(b[2])); g.lineTo(Math.round(x) + .5, Y(b[3])); g.stroke();
+      const y1 = Y(Math.max(b[1], b[4])), y2 = Y(Math.min(b[1], b[4])); g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(x - bw / 2, y1, bw, Math.max(1, y2 - y1), Math.min(2, bw / 4)) : g.rect(x - bw / 2, y1, bw, Math.max(1, y2 - y1)); g.fill(); });
+    // lignes + étiquettes dans la marge droite (écartées pour rester lisibles)
+    const suivi = R.sl_init && R.sl_init !== R.sl;
+    const L = [[R.tp, CL.vert, "TP"], [R.sl, CL.rouge, suivi ? "SL suivi" : "SL"], [suivi ? R.sl_init : null, "rgba(240,86,91,.55)", "Départ"], [R.suiveur, "#9ff0c9", "Suivi"], [R.entree, CL.or, "Entrée"], [R.sortie, "#ffffff", "Sortie"], [R.dernier, "#ffffff", "Prix"]].filter(x => x[0] != null);
+    for (const [v, c, t] of L) { const y = Math.round(Y(v)) + .5; g.strokeStyle = c; g.setLineDash(t === "Prix" ? [2, 4] : [6, 5]); g.lineWidth = t === "Prix" ? 1 : 1.3; g.beginPath(); g.moveTo(i0 != null && t !== "Prix" ? Math.max(0, X(i0) - slot / 2) : 0, y); g.lineTo(W, y); g.stroke(); }
+    g.setLineDash([]); g.lineWidth = 1;
+    const et = L.map(([v, c, t]) => ({ y: Y(v), c, txt: t + " " + fx(v) })).sort((a, b) => a.y - b.y), hh = fs + 9;
+    for (let k = 1; k < et.length; k++) if (et[k].y - et[k - 1].y < hh) et[k].y = et[k - 1].y + hh;
+    for (let k = et.length - 2; k >= 0; k--) if (et[k].y > et[k + 1].y - hh) et[k].y = et[k + 1].y - hh;
+    g.font = "700 " + (fs - 1) + "px Inter, sans-serif"; g.textAlign = "left";
+    for (const e of et) { const tw = Math.min(padD - 6, g.measureText(e.txt).width + 12); g.fillStyle = e.c; g.beginPath(); g.roundRect ? g.roundRect(W + 3, e.y - hh / 2, tw, hh - 2, 5) : g.rect(W + 3, e.y - hh / 2, tw, hh - 2); g.fill();
+      g.fillStyle = "#120f0b"; g.save(); g.beginPath(); g.rect(W + 3, e.y - hh / 2, tw, hh); g.clip(); g.fillText(e.txt, W + 9, e.y); g.restore(); }
+    // points d'entrée / de sortie
+    for (const [i, c, v] of [[i0, CL.or, R.entree], [i1, R.r > 0 ? CL.vert : CL.rouge, R.sortie]]) if (i != null && v != null) { g.fillStyle = c; g.shadowColor = c; g.shadowBlur = 10; g.beginPath(); g.arc(X(i), Y(v), 5.5, 0, 7); g.fill(); g.shadowBlur = 0; }
+    // réticule + OHLC
+    if (souris && souris.x < W) { const i = Math.max(0, Math.min(n - 1, Math.round(souris.x / slot - .5))), b = B[i], vy = hi - (souris.y - padH) / H * (hi - lo);
+      g.strokeStyle = "rgba(255,255,255,.22)"; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(i), padH); g.lineTo(X(i), padH + H); g.moveTo(0, souris.y); g.lineTo(W, souris.y); g.stroke(); g.setLineDash([]);
+      const t = new Date(b[0] * 1000).toLocaleString("fr-CH", { timeZone: "Europe/Zurich", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const txt = t + "   O " + fx(b[1]) + "  H " + fx(b[2]) + "  B " + fx(b[3]) + "  C " + fx(b[4]); g.font = "600 " + fs + "px Inter, sans-serif"; const tw = g.measureText(txt).width + 16;
+      g.fillStyle = "rgba(14,12,10,.85)"; g.fillRect(8, 8, tw, fs + 12); g.fillStyle = CL.ink; g.fillText(txt, 16, 8 + (fs + 12) / 2);
+      g.fillStyle = "rgba(255,255,255,.9)"; g.fillRect(W + 3, souris.y - 10, padD - 6, 20); g.fillStyle = "#111"; g.fillText(fx(vy), W + 9, souris.y); }
+  }
+
+  let rpR = null, rpSouris = null; const peindreRp = () => rpR && grapheTrade($("rpC"), rpR, rpSouris);
+  addEventListener("resize", peindreRp);
+  $("rpC").addEventListener("pointermove", e => { const r = $("rpC").getBoundingClientRect(); rpSouris = { x: e.clientX - r.left, y: e.clientY - r.top }; peindreRp(); });
+  $("rpC").addEventListener("pointerup", () => { rpSouris = null; peindreRp(); }); $("rpC").addEventListener("pointerleave", () => { rpSouris = null; peindreRp(); });
   function dessinerReplay(cv, R) {
     const z = prep(cv); if (!z) return; const { g, w, h } = z, B = R.bars || [], n = B.length; if (n < 2) return; const d = R.decimales ?? 5;
-    let lo = Infinity, hi = -Infinity; for (const b of B) { lo = Math.min(lo, b[3]); hi = Math.max(hi, b[2]); } for (const v of [R.sl, R.tp, R.entree, R.sortie]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    const m = (hi - lo) * .06 || 1; lo -= m; hi += m; const W = w - 56, Y = v => 6 + (hi - v) / (hi - lo) * (h - 12), sl = W / (n + 1), X = i => (i + .5) * sl;
+    let lo = Infinity, hi = -Infinity; for (const b of B) { lo = Math.min(lo, b[3]); hi = Math.max(hi, b[2]); } for (const v of [R.sl, R.tp, R.entree, R.sortie, R.dernier, R.sl_init, R.suiveur]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const m = (hi - lo) * .06 || 1; lo -= m; hi += m; const W = w - (R.sl_init ? 96 : 56), Y = v => 6 + (hi - v) / (hi - lo) * (h - 12), sl = W / (n + 1), X = i => (i + .5) * sl;
     const ix = ts => { if (!ts) return null; const k = B.findIndex(b => b[0] >= ts / 1000 - 1); return k < 0 ? n - 1 : k; }, i0 = ix(R.ts_entree), i1 = ix(R.ts_sortie);
     if (i0 != null) { const x0 = X(i0) - sl / 2, x1 = i1 != null ? X(i1) + sl / 2 : W, ye = Y(R.entree); g.fillStyle = "rgba(86,211,155,.13)"; g.fillRect(x0, Math.min(ye, Y(R.tp)), x1 - x0, Math.abs(Y(R.tp) - ye)); g.fillStyle = "rgba(240,86,91,.13)"; g.fillRect(x0, Math.min(ye, Y(R.sl)), x1 - x0, Math.abs(Y(R.sl) - ye)); }
     const bw = Math.max(1.2, sl * .6); B.forEach((b, i) => { const c = b[4] >= b[1] ? "#56d39b" : "#f0565b", x = X(i); g.strokeStyle = c; g.beginPath(); g.moveTo(x, Y(b[2])); g.lineTo(x, Y(b[3])); g.stroke(); g.fillStyle = c; g.fillRect(x - bw / 2, Y(Math.max(b[1], b[4])), bw, Math.max(1, Math.abs(Y(b[1]) - Y(b[4])))); });
+    if (R.niveaux) { g.setLineDash([2, 5]); g.lineWidth = 1; for (const [L, c] of [[R.niveaux.res || [], "rgba(240,120,124,.5)"], [R.niveaux.sup || [], "rgba(110,220,170,.5)"]]) for (const v of L) { if (v < lo || v > hi) continue; g.strokeStyle = c; g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(W, Y(v)); g.stroke(); } g.setLineDash([]); }
     g.font = "600 10px Inter, sans-serif"; g.textBaseline = "middle";
-    for (const [v, c, t] of [[R.tp, "#56d39b", "TP"], [R.sl, "#f0565b", "SL"], [R.entree, "#e9bd6a", "IN"], [R.sortie, "#ffffff", "OUT"]]) { if (v == null) continue; const y = Y(v); g.setLineDash([4, 4]); g.strokeStyle = c; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.setLineDash([]); g.fillStyle = c; g.fillText(t, W + 5, y); }
+    for (const [v, c, t] of [[R.tp, "#56d39b", "TP"], [R.sl, "#f0565b", R.sl_init && R.sl_init !== R.sl ? "SL suivi" : "SL"], [R.sl_init && R.sl_init !== R.sl ? R.sl_init : null, "rgba(240,86,91,.45)", "SL départ"], [R.suiveur, "#9ff0c9", "SUIVI"], [R.entree, "#e9bd6a", "IN"], [R.sortie, "#ffffff", "OUT"], [R.dernier, "#ffffff", "PRIX"]]) { if (v == null) continue; const y = Y(v); g.setLineDash([4, 4]); g.strokeStyle = c; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.setLineDash([]); g.fillStyle = c; g.fillText(t, W + 5, y); }
     for (const [i, c, v] of [[i0, "#e9bd6a", R.entree], [i1, R.r > 0 ? "#56d39b" : "#f0565b", R.sortie]]) if (i != null && v != null) { g.fillStyle = c; g.beginPath(); g.arc(X(i), Y(v), 4.5, 0, 7); g.fill(); }
   }
   // téléphone tourné sur l'onglet Scalping : graphique en plein écran
