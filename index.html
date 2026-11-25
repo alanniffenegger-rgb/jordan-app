@@ -257,7 +257,7 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
 </nav>
 <div id="toast"></div>
 
-<div class="voile" id="replay"><div class="boite"><h3 id="rpT"></h3><p id="rpP" style="margin-bottom:8px"></p><canvas id="rpC"></canvas><button class="btn" id="rpX" style="width:100%">Fermer</button></div></div>
+<div class="voile" id="replay"><div class="boite"><h3 id="rpT"></h3><p id="rpP" style="margin-bottom:8px"></p><canvas id="rpC"></canvas><button class="btn" id="rpBE" style="width:100%;margin-bottom:8px;display:none">SL au point mort</button><button class="btn" id="rpX" style="width:100%">Fermer</button></div></div>
 <div class="voile" id="confirme"><div class="boite"><h3 id="cfT"></h3><p id="cfP"></p><div class="bts"><button class="btn" id="cfNon">Annuler</button><button class="btn rouge" id="cfOui">Confirmer</button></div></div></div>
 
 <div class="voile" id="connexion"><form class="boite" id="fConn" autocomplete="on">
@@ -522,6 +522,8 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     $("rpT").innerHTML = esc(x.paire) + ' <span class="tag ' + x.sens + '">' + x.sens + "</span>" + (ec ? ' <span class="tag">en cours</span>' : "");
     $("rpP").innerHTML = tr ? '<span class="' + sg(tr.r) + '">' + rr(tr.r) + " · " + usd(tr.usd) + "</span> · " + esc(tr.strat || "") + " · " + jh(tr.ts) : esc(ec.strat || ec.tf || "");
     $("replay").classList.add("vu"); const c = $("rpC"); c.style.display = "";
+    $("rpBE").style.display = ec ? "" : "none";
+    $("rpBE").onclick = () => { const e = ec.entree; confirmer("SL au point mort ?", "Le SL passe à l'entrée (" + e + ") : le trade ne peut plus perdre. Refusé si le prix n'a pas encore dépassé l'entrée.", async () => { await api("/api/action", { quoi: "niveaux", id, sl: e }); toast("SL au point mort"); if (rpId === id) ouvrirReplay(id); }); };
     const charger = async () => { try { const R = await api("/api/replay?id=" + encodeURIComponent(id)); if (rpId !== id) return; if (!R || R.vide) { c.style.display = "none"; if (ec && ec.tf) { if (!$("rpScan")) { $("rpP").innerHTML = esc(ec.paire) + " " + esc(ec.tf) + " n'a pas encore été lu par Jordan.<br><button class='btn or' id='rpScan' style='margin-top:12px;width:100%'>Scanner " + esc(ec.paire) + " " + esc(ec.tf) + "</button>";
             $("rpScan").onclick = async () => { const b = $("rpScan"); b.disabled = true; b.textContent = "Lecture du graphique sur le PC…"; try { await api("/api/action", { quoi: "lire", paire: ec.paire, tf: ec.tf }); } catch (x) { toast(x.message); b.disabled = false; b.textContent = "Réessayer"; } }; } }
           else $("rpP").innerHTML += '<br><span class="f">Pas de graphique enregistré pour ce trade.</span>'; return; }
