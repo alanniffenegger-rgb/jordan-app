@@ -518,7 +518,7 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
   let rpId = null, rpMinut = null;
   async function ouvrirReplay(id) {
     const tr = (E && E.journal || []).find(x => x.id === id), ec = !tr && (E && E.en_cours || []).find(x => x.id === id); if (!tr && !ec) return;
-    const x = tr || ec; rpId = id; clearInterval(rpMinut); rpR = null; const cv0 = $("rpC"); cv0.getContext("2d").clearRect(0, 0, cv0.width, cv0.height);
+    const x = tr || ec; rpId = id; clearInterval(rpMinut); rpR = null; rpVue = null; rpPan = null; doigts.clear(); const cv0 = $("rpC"); cv0.getContext("2d").clearRect(0, 0, cv0.width, cv0.height);
     $("rpT").innerHTML = esc(x.paire) + ' <span class="tag ' + x.sens + '">' + x.sens + "</span>" + (ec ? ' <span class="tag">en cours</span>' : "");
     $("rpP").innerHTML = tr ? '<span class="' + sg(tr.r) + '">' + rr(tr.r) + " · " + usd(tr.usd) + "</span> · " + esc(tr.strat || "") + " · " + jh(tr.ts) : esc(ec.strat || ec.tf || "");
     $("replay").classList.add("vu"); const c = $("rpC"); c.style.display = "";
@@ -539,7 +539,13 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), w = r.width, h = r.height; if (!w || !h) return;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-    const B = R.bars || [], n = B.length; if (n < 2) return; const d = R.decimales ?? 5, petit = w < 520, fs = petit ? 11 : 12.5;
+    const TOUT = R.bars || [], N0 = TOUT.length; if (N0 < 2) return; const d = R.decimales ?? 5, petit = w < 520, fs = petit ? 11 : 12.5;
+    // bougie qui CONTIENT l'instant (et pas la suivante) : entrée et sortie placées sur la bonne bougie
+    const ixT = ts => { if (!ts) return null; const s = ts / 1000; let k = -1; for (let i = 0; i < N0; i++) { if (TOUT[i][0] <= s) k = i; else break; } return k; }, e0 = ixT(R.ts_entree), e1 = ixT(R.ts_sortie);
+    // vue : zoom / déplacement (R._vue), sinon cadrée sur le trade (replay) ou sur les dernières bougies (direct)
+    let a, b; if (R._vue) { a = R._vue.a; b = R._vue.b; } else if (R.live || e1 == null) { b = N0; a = Math.max(0, N0 - (petit ? 60 : 90)); } else { a = Math.max(0, (e0 ?? 0) - (petit ? 30 : 45)); b = Math.min(N0, e1 + (petit ? 12 : 20)); if (b - a < 40) a = Math.max(0, b - 40); }
+    b = Math.max(2, Math.min(N0, b)); a = Math.max(0, Math.min(b - 2, a)); cv._vue = { a, b, N0 };
+    const B = TOUT.slice(a, b), n = B.length;
     const fx = v => v == null ? "—" : Number(v).toLocaleString("fr-CH", { minimumFractionDigits: d, maximumFractionDigits: d });
     const CL = { vert: "#56d39b", rouge: "#f0565b", or: "#e9bd6a", ink: "#f1efe9", faint: "rgba(241,239,233,.42)", grille: "rgba(255,240,215,.06)" };
     const padD = petit ? 96 : 134, padH = 14, padB = 26, W = w - padD, H = h - padH - padB;
@@ -554,17 +560,17 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     for (let k = 0; k <= 6; k++) { const v = lo + (hi - lo) * k / 6, y = Math.round(Y(v)) + .5; g.strokeStyle = CL.grille; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillStyle = CL.faint; g.fillText(fx(v), W + 8, y); }
     // heures
     const pas = Math.max(1, Math.round(n / (petit ? 4 : 8))), tz = { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit" };
-    g.textAlign = "center"; for (let i = 0; i < n; i += pas) { const t = new Date(B[i][0] * 1000), x = X(i); g.strokeStyle = CL.grille; g.beginPath(); g.moveTo(Math.round(x) + .5, padH); g.lineTo(Math.round(x) + .5, padH + H); g.stroke();
+    g.textAlign = "center"; for (let i = 0; i < n; i += pas) { const t = new Date(B[i][0] * 1000), x = X(i); if (x < 34) continue; g.strokeStyle = CL.grille; g.beginPath(); g.moveTo(Math.round(x) + .5, padH); g.lineTo(Math.round(x) + .5, padH + H); g.stroke();
       g.fillStyle = CL.faint; g.fillText((t.getDate() + "." + (t.getMonth() + 1) + " ") + t.toLocaleTimeString("fr-CH", tz), x, h - padB / 2); }
     // supports / résistances
     if (R.niveaux) { g.setLineDash([2, 6]); for (const [L, c] of [[R.niveaux.res || [], "rgba(240,120,124,.45)"], [R.niveaux.sup || [], "rgba(110,220,170,.45)"]]) for (const v of L) { if (v < lo || v > hi) continue; g.strokeStyle = c; g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(W, Y(v)); g.stroke(); } g.setLineDash([]); }
     // zones depuis l'entrée
-    const ix = ts => { if (!ts) return null; const k = B.findIndex(b => b[0] >= ts / 1000 - 1); return k < 0 ? n - 1 : k; }, i0 = ix(R.ts_entree), i1 = ix(R.ts_sortie);
+    const i0 = e0 == null || e0 < 0 ? null : e0 - a, i1 = e1 == null || e1 < 0 ? null : e1 - a;
     if (i0 != null && R.entree != null) { const x0 = X(i0) - slot / 2, x1 = i1 != null ? X(i1) + slot / 2 : W, ye = Y(R.entree);
       if (R.tp) { g.fillStyle = "rgba(86,211,155,.10)"; g.fillRect(x0, Math.min(ye, Y(R.tp)), x1 - x0, Math.abs(Y(R.tp) - ye)); }
       if (R.sl) { g.fillStyle = "rgba(240,86,91,.10)"; g.fillRect(x0, Math.min(ye, Y(R.sl)), x1 - x0, Math.abs(Y(R.sl) - ye)); } }
     // EMA
-    const courbe = (A, c, lw) => { g.beginPath(); let ok = false; (A || []).slice(-n).forEach((v, i) => { if (v == null) return; ok ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)); ok = true; }); g.strokeStyle = c; g.lineWidth = lw; g.stroke(); };
+    const courbe = (A, c, lw) => { g.beginPath(); let ok = false; (A || []).slice(a, b).forEach((v, i) => { if (v == null) return; ok ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)); ok = true; }); g.strokeStyle = c; g.lineWidth = lw; g.stroke(); };
     courbe(R.ema50, "rgba(255,255,255,.30)", 1.3); courbe(R.ema20, CL.or, 1.8); g.lineWidth = 1;
     // bougies
     const bw = Math.max(2, slot * .64);
@@ -583,6 +589,9 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
       g.fillStyle = "#120f0b"; g.save(); g.beginPath(); g.rect(W + 3, e.y - hh / 2, tw, hh); g.clip(); g.fillText(e.txt, W + 9, e.y); g.restore(); }
     // points d'entrée / de sortie
     for (const [i, c, v] of [[i0, CL.or, R.entree], [i1, R.r > 0 ? CL.vert : CL.rouge, R.sortie]]) if (i != null && v != null) { g.fillStyle = c; g.shadowColor = c; g.shadowBlur = 10; g.beginPath(); g.arc(X(i), Y(v), 5.5, 0, 7); g.fill(); g.shadowBlur = 0; }
+    // bulle de valeur pendant qu'on glisse une ligne (au-dessus du doigt / de la souris)
+    if (R._drag && R[R._drag] != null) { const yy = Y(R[R._drag]), s = (R._drag === "sl" ? "SL " : "TP ") + fx(R[R._drag]), fz = petit ? 15 : 14; g.font = "700 " + fz + "px Inter, sans-serif"; const tw = g.measureText(s).width + 24, bx = Math.max(6, Math.min(W - tw - 6, (R._dragX ?? W / 2) - tw / 2)), by = Math.max(4, yy - (petit ? 62 : 44));
+      g.fillStyle = R._drag === "sl" ? "#f0565b" : "#56d39b"; g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 14; g.beginPath(); g.roundRect ? g.roundRect(bx, by, tw, fz + 16, 10) : g.rect(bx, by, tw, fz + 16); g.fill(); g.shadowBlur = 0; g.fillStyle = "#120f0b"; g.textAlign = "center"; g.fillText(s, bx + tw / 2, by + (fz + 16) / 2); g.textAlign = "left"; }
     // réticule + OHLC
     if (souris && souris.x < W) { const i = Math.max(0, Math.min(n - 1, Math.round(souris.x / slot - .5))), b = B[i], vy = hi - (souris.y - padH) / H * (hi - lo);
       g.strokeStyle = "rgba(255,255,255,.22)"; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(i), padH); g.lineTo(X(i), padH + H); g.moveTo(0, souris.y); g.lineTo(W, souris.y); g.stroke(); g.setLineDash([]);
@@ -592,14 +601,30 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
       g.fillStyle = "rgba(255,255,255,.9)"; g.fillRect(W + 3, souris.y - 10, padD - 6, 20); g.fillStyle = "#111"; g.fillText(fx(vy), W + 9, souris.y); }
   }
 
-  let rpR = null, rpSouris = null; const peindreRp = () => rpR && grapheTrade($("rpC"), rpR, rpSouris);
+  let rpR = null, rpSouris = null, rpVue = null, rpPan = null; const doigts = new Map();
+  const vueM = R => { if (!rpVue || !R || !R.bars) return null; const N0 = R.bars.length, n = Math.max(12, Math.min(N0, rpVue.n)), b = rpVue.fin == null ? N0 : Math.max(n, Math.min(N0, rpVue.fin)); return { a: b - n, b }; };
+  const peindreRp = () => rpR && grapheTrade($("rpC"), Object.assign({}, rpR, { _vue: vueM(rpR) }), rpSouris);
   addEventListener("resize", peindreRp);
   // le doigt sur une ligne SL ou TP (position ouverte) la fait glisser ; au lâcher, confirmation puis envoi à TradingView
   let rpDrag = null, rpBase = null; const rpPos = e => { const r = $("rpC").getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-  $("rpC").addEventListener("pointerdown", e => { const p = rpPos(e), G = $("rpC")._geo; if (!rpR || !rpR.live || !G || p.x > G.W) return; for (const k of ["sl", "tp"]) if (rpR[k] != null && Math.abs(G.Y(rpR[k]) - p.y) < 18) { rpBase = rpR; rpDrag = { k, de: rpR[k], echelle: { lo: G.lo, hi: G.hi } }; $("rpC").setPointerCapture(e.pointerId); clearInterval(rpMinut); return; } });
+  $("rpC").addEventListener("pointerdown", e => { const p = rpPos(e), G = $("rpC")._geo; if (!rpR || !rpR.live || !G) return;
+    const k = ["sl", "tp"].filter(k => rpR[k] != null).map(k => [k, Math.abs(G.Y(rpR[k]) - p.y)]).sort((a, b) => a[1] - b[1]).find(x => x[1] < 34);   // doigt : large zone de prise, ligne ou étiquette
+    if (!k) { const V = $("rpC")._vue; if (!V) return; doigts.set(e.pointerId, p); $("rpC").setPointerCapture(e.pointerId);
+      if (doigts.size === 1) rpPan = { x0: p.x, a: V.a, b: V.b, N0: V.N0 };
+      else if (doigts.size === 2) { const [p1, p2] = [...doigts.values()]; rpPan = { pince: Math.abs(p1.x - p2.x) || 1, n: V.b - V.a, b: V.b, N0: V.N0 }; }
+      return; }
+    e.preventDefault(); rpBase = rpR; rpDrag = { k: k[0], de: rpR[k[0]], v0: G.V(p.y), echelle: { lo: G.lo, hi: G.hi } }; $("rpC").setPointerCapture(e.pointerId); clearInterval(rpMinut); rpR = Object.assign({}, rpBase, { _drag: k[0], _dragX: p.x, _echelle: rpDrag.echelle }); peindreRp(); });
   $("rpC").addEventListener("pointermove", e => { const p = rpPos(e);
-    if (rpDrag) { rpDrag.v = $("rpC")._geo.V(p.y); rpR = Object.assign({}, rpBase, { [rpDrag.k]: rpDrag.v, _echelle: rpDrag.echelle }); rpSouris = null; } else rpSouris = p; peindreRp(); });
-  $("rpC").addEventListener("pointerup", () => { if (!rpDrag) { rpSouris = null; return peindreRp(); } const d = rpDrag; rpDrag = null; if (d.v == null) { rpR = rpBase; return peindreRp(); }
+    if (rpPan && doigts.has(e.pointerId)) { doigts.set(e.pointerId, p); rpSouris = null; const P = rpPan;
+      if (P.pince && doigts.size >= 2) { const [p1, p2] = [...doigts.values()], d = Math.abs(p1.x - p2.x) || 1, n = Math.round(Math.max(12, Math.min(P.N0, P.n * P.pince / d))); rpVue = { n, fin: P.b >= P.N0 ? null : P.b }; }
+      else if (!P.pince) { const n = P.b - P.a, pas = $("rpC")._geo.W / (n + 2), dd = Math.round((P.x0 - p.x) / pas), b = Math.max(n, Math.min(P.N0, P.b + dd)); rpVue = { n, fin: b >= P.N0 ? null : b }; }
+      return peindreRp(); }
+    if (rpDrag) { e.preventDefault(); rpDrag.v = rpDrag.de + ($("rpC")._geo.V(p.y) - rpDrag.v0); rpR = Object.assign({}, rpBase, { [rpDrag.k]: rpDrag.v, _echelle: rpDrag.echelle, _drag: rpDrag.k, _dragX: p.x }); rpSouris = null; } else rpSouris = p; peindreRp(); });
+  $("rpC").addEventListener("touchmove", e => { if (rpDrag || rpPan) e.preventDefault(); }, { passive: false });
+  $("rpC").addEventListener("dblclick", () => { rpVue = null; peindreRp(); });   // iOS : la page ne défile pas pendant le glissé
+  const finDoigt = e => { doigts.delete(e.pointerId); if (!doigts.size) rpPan = null; else if (rpPan && rpPan.pince) rpPan = null; };
+  $("rpC").addEventListener("pointercancel", finDoigt);
+  $("rpC").addEventListener("pointerup", e => { if (doigts.has(e.pointerId)) { finDoigt(e); return; } if (!rpDrag) { rpSouris = null; return peindreRp(); } const d = rpDrag; rpDrag = null; if (d.v == null) { rpR = rpBase; return peindreRp(); }
     const v = +d.v.toFixed(rpBase.decimales ?? 5), nom = d.k === "sl" ? "le SL" : "le TP", id = rpId;
     confirmer("Déplacer " + nom + " ?", "De " + d.de + " à " + v + ". Jordan l'envoie tout de suite à TradingView.", async () => { await api("/api/action", { quoi: "niveaux", id, [d.k]: v }); toast((d.k === "sl" ? "SL" : "TP") + " déplacé à " + v); if (rpId === id) ouvrirReplay(id); });
     rpAnnule = () => { rpR = rpBase; peindreRp(); if (rpId) ouvrirReplay(rpId); }; });
