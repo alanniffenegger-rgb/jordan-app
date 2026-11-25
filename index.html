@@ -539,7 +539,13 @@ body.paysage .vue[data-vue="scalp"] .carte:first-child { padding: 10px 12px; bor
     const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), w = r.width, h = r.height; if (!w || !h) return;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-    const TOUT = R.bars || [], N0 = TOUT.length; if (N0 < 2) return; const d = R.decimales ?? 5, petit = w < 520, fs = petit ? 11 : 12.5;
+    const TOUT = (R.bars || []).map(b => b.slice()); if (TOUT.length < 2) return;
+    // le prix de sortie fait partie d'une bougie : si elle manque (enregistrée avant la clôture), on l'ajoute ; sinon sa mèche va jusqu'à la sortie
+    { const pas = TOUT[TOUT.length - 1][0] - TOUT[TOUT.length - 2][0] || 60, der = TOUT[TOUT.length - 1], v = R.sortie, ts = R.ts_sortie && R.ts_sortie / 1000;
+      if (v != null && ts) { if (ts >= der[0] + pas) { const d = der[0] + Math.floor((ts - der[0]) / pas) * pas; TOUT.push([d, der[4], Math.max(der[4], v), Math.min(der[4], v), v]); }
+        else { const k = TOUT.findLastIndex ? TOUT.findLastIndex(b => b[0] <= ts) : TOUT.length - 1; if (k >= 0) { TOUT[k][2] = Math.max(TOUT[k][2], v); TOUT[k][3] = Math.min(TOUT[k][3], v); } } } }
+    if (R.entree != null && R.ts_entree) { const ts = R.ts_entree / 1000; let k = -1; for (let i = 0; i < TOUT.length; i++) { if (TOUT[i][0] <= ts) k = i; else break; } if (k >= 0) { TOUT[k][2] = Math.max(TOUT[k][2], R.entree); TOUT[k][3] = Math.min(TOUT[k][3], R.entree); } }
+    const N0 = TOUT.length; const d = R.decimales ?? 5, petit = w < 520, fs = petit ? 11 : 12.5;
     // bougie qui CONTIENT l'instant (et pas la suivante) : entrée et sortie placées sur la bonne bougie
     const ixT = ts => { if (!ts) return null; const s = ts / 1000; let k = -1; for (let i = 0; i < N0; i++) { if (TOUT[i][0] <= s) k = i; else break; } return k; }, e0 = ixT(R.ts_entree), e1 = ixT(R.ts_sortie);
     // vue : zoom / déplacement (R._vue), sinon cadrée sur le trade (replay) ou sur les dernières bougies (direct)
